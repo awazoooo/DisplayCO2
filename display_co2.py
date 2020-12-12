@@ -1,22 +1,25 @@
 # coding: UTF-8
 
 import Adafruit_SSD1306
+import time
+import datetime
+import mh_z19
+import requests
+import toml
+import sys
 
 from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
 
-import subprocess
-import time
-import datetime
-import mh_z19
 
 def getCO2():
     # root authority required
     dat = mh_z19.read_all()
     return dat['co2'], dat['temperature']
 
-def draw_display(disp, gpio_interval=5):
+
+def draw_display(disp, config):
     # Create blank image for drawing.
     # Make sure to create image with mode '1' for 1-bit color.
     width = disp.width
@@ -40,13 +43,13 @@ def draw_display(disp, gpio_interval=5):
     # Load default font.
     font = ImageFont.load_default()
 
+    # last webhook datetime
+    last_webhook_datetime = None
+
     while True:
         # Get CO2 sensor.
         co2, temp = getCO2()
         dt = datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')
-
-        # GPIO interval.
-        time.sleep(gpio_interval)
 
         # Draw a black filled box to clear the image.
         draw.rectangle((0,0,width,height), outline=0, fill=0)
@@ -56,13 +59,33 @@ def draw_display(disp, gpio_interval=5):
         draw.text((x, top+15), "CO2 : {}ppm".format(str(co2)), font=font, fill=255)
         draw.text((x, top+25), "TEMP: {}°C".format(str(temp)),  font=font, fill=255)
 
-
         # Display image.
         disp.image(image)
         disp.display()
 
+        # CO2 alert notification
+        if co2 >= config['general']['co2_threshold']:
+            if last_webhook_datetime is None or last_webhook_datetime + datetime.timedelta(minutes=config['general']['webhook_interval_minutes']) < datetime.datetime.now():
+                data = {
+                    'value1': co2,
+                    'value2': temp,
+                    'value3': dt
+                }
+                headers = {
+                    'Content-Type': 'application/json'
+                }
+                # Webhook
+                r = requests.post(
+                    url = config['general']['webhook_url'],
+                    json = data,
+                    headers = headers
+                )
+                print(r.text)
+                last_webhook_datetime = datetime.datetime.now()
+
         # GPIO interval time.
-        time.sleep(gpio_interval)
+        time.sleep(config['general']['co2_measure_interval_seconds'])
+
 
 def init_display():
     # Get display object.
@@ -76,9 +99,13 @@ def init_display():
     disp.display()
     return disp
 
+
 if __name__ == '__main__':
     # Initialize display.
     disp = init_display()
 
+    # Read toml config file.
+    config = toml.load(open('config.toml'))
+
     # Infinite loop.
-    draw_display(disp, 0.5)
+    draw_display(disp, config)

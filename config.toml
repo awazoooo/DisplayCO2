@@ -1,0 +1,5 @@
+[general]
+co2_measure_interval_seconds=1
+co2_threshold=1000
+webhook_url="https://example.com"
+webhook_interval_minutes=1
