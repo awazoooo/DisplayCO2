@@ -10,7 +10,7 @@
 * systemd に登録して実行
 
 ```
-cat /etc/systemd/system/display_co2.service
+# cat /etc/systemd/system/display_co2.service
 [Unit]
 Description = Display CO2 daemon
 
